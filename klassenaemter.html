@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ämter-Rotation für die Klasse</title>
+<style>
+  :root {
+    --blau: #2b6cb0;
+    --hell: #ebf4ff;
+    --grau: #4a5568;
+    --rot: #c53030;
+    --gruen: #2f855a;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+    color: var(--grau);
+    background: #f7fafc;
+    margin: 0;
+    padding: 16px;
+  }
+  main { max-width: 760px; margin: 0 auto; }
+  h1 { color: var(--blau); font-size: 1.6rem; margin: 8px 0 4px; }
+  .untertitel { margin: 0 0 20px; color: #718096; }
+  section {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 16px;
+    margin-bottom: 16px;
+  }
+  h2 { font-size: 1.1rem; margin: 0 0 12px; color: var(--blau); }
+  button {
+    font: inherit;
+    border: none;
+    border-radius: 6px;
+    padding: 8px 14px;
+    cursor: pointer;
+    background: #e2e8f0;
+    color: var(--grau);
+  }
+  button.primaer { background: var(--blau); color: #fff; }
+  button.gefahr { background: #fed7d7; color: var(--rot); }
+  button.klein { padding: 3px 8px; font-size: 0.85rem; }
+  input[type="text"] {
+    font: inherit;
+    padding: 8px;
+    border: 1px solid #cbd5e0;
+    border-radius: 6px;
+  }
+  #name-input { width: 60%; }
+  ul#name-list { list-style: none; padding: 0; margin: 12px 0 0; }
+  ul#name-list li {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 8px;
+    border-bottom: 1px solid #edf2f7;
+  }
+  .kind-name { font-weight: 600; min-width: 140px; }
+  .statistik { color: #718096; font-size: 0.85rem; }
+  .niemals { font-size: 0.85rem; color: #718096; display: flex; gap: 10px; flex-wrap: wrap; width: 100%; }
+  .niemals label { display: flex; align-items: center; gap: 3px; cursor: pointer; }
+  .amt-karte {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 12px;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    margin-bottom: 8px;
+    background: var(--hell);
+  }
+  .amt-karte .amt-titel { font-weight: 700; }
+  .amt-karte .kind { font-size: 1.15rem; font-weight: 600; color: var(--blau); }
+  .amt-karte .aktionen { display: flex; gap: 6px; }
+  .leer { color: #a0aec0; font-style: italic; }
+  .runde-aktion { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+  .historie-eintrag { border-top: 1px solid #edf2f7; padding: 10px 0; }
+  .historie-datum { font-weight: 600; color: var(--blau); }
+  .historie-aemter { margin: 4px 0 0; padding-left: 18px; }
+  .hinweis { color: var(--rot); font-size: 0.9rem; margin-top: 8px; }
+  @media print {
+    body { background: #fff; padding: 0; }
+    section, #names-section, #history-section, .runde-aktion, .aktionen, .untertitel { display: none !important; }
+    #draw-section { display: block !important; border: none; padding: 0; }
+    #draw-section h2, #draw-section button { display: none; }
+    .amt-karte { border: 1px solid #333; background: #fff; font-size: 14pt; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>Ämter-Rotation für die Klasse</h1>
+  <p class="untertitel">Alles wird automatisch im Browser gespeichert – Datei einfach wieder öffnen, Daten sind noch da.</p>
+
+  <section id="names-section">
+    <h2>Schülerinnen und Schüler</h2>
+    <input type="text" id="name-input" placeholder="Name eingeben …">
+    <button class="primaer" id="add-name">Hinzufügen</button>
+    <ul id="name-list"></ul>
+    <button class="gefahr klein" id="reset" style="margin-top:12px;">Alle Daten löschen</button>
+  </section>
+
+  <section id="draw-section">
+    <h2>Aktuelle Runde</h2>
+    <button class="primaer" id="draw">🎲 Neue Runde auslosen</button>
+    <div id="current-round"></div>
+  </section>
+
+  <section id="history-section">
+    <h2>Vergangene Runden</h2>
+    <div id="history"></div>
+  </section>
+</main>
+
+<script>
+const AEMTER = [
+  { id: 'klassenrat', label: 'Klassenrat leiten', emoji: '🗣️' },
+  { id: 'postkasten', label: 'Postkasten leeren', emoji: '📬' },
+  { id: 'zeit', label: 'Zeitwächter / Zeitwächterin', emoji: '⏰' },
+  { id: 'protokoll', label: 'Protokoll schreiben', emoji: '📝' }
+];
+const SPEICHER = 'klassenaemter-v1';
+
+let state = lade();
+let hinweisText = '';
+
+function lade() {
+  try {
+    const roh = localStorage.getItem(SPEICHER);
+    if (roh) return JSON.parse(roh);
+  } catch (e) {}
+  return { kids: [], current: null, history: [] };
+}
+
+function speichern() {
+  localStorage.setItem(SPEICHER, JSON.stringify(state));
+}
+
+function kindName(kidId) {
+  const k = state.kids.find(k => k.id === kidId);
+  return k ? k.name : '(unbekannt)';
+}
+
+function anzahlAmt(kid, amtId) {
+  return state.history.reduce((n, h) =>
+    n + h.assignments.filter(a => a.amt === amtId && a.kidId === kid.id).length, 0);
+}
+
+function anzahlGesamt(kid) {
+  return state.history.reduce((n, h) =>
+    n + h.assignments.filter(a => a.kidId === kid.id).length, 0);
+}
+
+function mische(liste) {
+  const kopie = liste.slice();
+  for (let i = kopie.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [kopie[i], kopie[j]] = [kopie[j], kopie[i]];
+  }
+  return kopie;
+}
+
+function neueRunde() {
+  if (state.kids.length === 0) {
+    alert('Bitte zuerst mindestens einen Namen eingeben.');
+    return;
+  }
+  if (state.current && !confirm('Es läuft bereits eine Runde. Neue auslosen und die aktuelle verwerfen?')) return;
+
+  const assignments = [];
+  const vergeben = new Set();
+  for (const amt of AEMTER) {
+    const pool = mische(state.kids.filter(k =>
+      !vergeben.has(k.id) && !(k.never && k.never[amt.id])
+    ));
+    if (!pool.length) {
+      assignments.push({ amt: amt.id, kidId: null });
+      continue;
+    }
+    pool.sort((a, b) =>
+      anzahlAmt(a, amt.id) - anzahlAmt(b, amt.id) ||
+      anzahlGesamt(a) - anzahlGesamt(b));
+    const gewaehlt = pool[0];
+    vergeben.add(gewaehlt.id);
+    assignments.push({ amt: amt.id, kidId: gewaehlt.id });
+  }
+  state.current = { datum: new Date().toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' }), assignments: [], abgelehnt: [] };
+  state.current.assignments = assignments;
+  hinweisText = '';
+  speichern();
+  render();
+}
+
+function moechteNicht(amtId) {
+  const a = state.current.assignments.find(x => x.amt === amtId);
+  if (!a || a.kidId === null) return;
+  const kandidaten = state.kids.filter(k =>
+    k.id !== a.kidId &&
+    !state.current.assignments.some(x => x.kidId === k.id) &&
+    !state.current.abgelehnt.includes(k.id) &&
+    !(k.never && k.never[amtId]));
+  if (!kandidaten.length) {
+    hinweisText = 'Kein anderes Kind verfügbar für „' + amtLabel(amtId) + '“. Bitte mehr Namen eintragen oder dauerhafte Ausschlüsse prüfen.';
+    render();
+    return;
+  }
+  state.current.abgelehnt.push(a.kidId);
+  kandidaten.sort((x, y) =>
+    anzahlAmt(x, amtId) - anzahlAmt(y, amtId) ||
+    anzahlGesamt(x) - anzahlGesamt(y));
+  a.kidId = kandidaten[0].id;
+  hinweisText = '';
+  speichern();
+  render();
+}
+
+function amtLabel(amtId) {
+  return AEMTER.find(a => a.id === amtId).label;
+}
+
+function rundeSpeichern() {
+  if (!state.current) return;
+  const besetzt = state.current.assignments.filter(a => a.kidId !== null);
+  if (!besetzt.length) {
+    alert('Es ist kein Amt vergeben.');
+    return;
+  }
+  state.history.push({ datum: state.current.datum, assignments: state.current.assignments });
+  state.current = null;
+  speichern();
+  render();
+}
+
+function rundeVerwerfen() {
+  if (!state.current) return;
+  if (!confirm('Aktuelle Runde verwerfen?')) return;
+  state.current = null;
+  speichern();
+  render();
+}
+
+function nameHinzufuegen() {
+  const feld = document.getElementById('name-input');
+  const name = feld.value.trim();
+  if (!name) return;
+  state.kids.push({ id: Date.now() + '-' + Math.random().toString(36).slice(2, 8), name: name, never: {} });
+  feld.value = '';
+  feld.focus();
+  speichern();
+  render();
+}
+
+function nameLoeschen(id) {
+  const kid = state.kids.find(k => k.id === id);
+  if (!confirm('„' + kid.name + '“ wirklich aus der Liste entfernen? Alte Runden bleiben erhalten.')) return;
+  state.kids = state.kids.filter(k => k.id !== id);
+  speichern();
+  render();
+}
+
+function nameAendern(id) {
+  const kid = state.kids.find(k => k.id === id);
+  const neu = prompt('Neuer Name:', kid.name);
+  if (neu && neu.trim()) {
+    kid.name = neu.trim();
+    speichern();
+    render();
+  }
+}
+
+function neverUmschalten(id, amtId, geklickt) {
+  const kid = state.kids.find(k => k.id === id);
+  if (geklickt) kid.never[amtId] = true;
+  else delete kid.never[amtId];
+  speichern();
+}
+
+function datenLoeschen() {
+  if (!confirm('Wirklich ALLE Daten löschen (Namen, Verlauf, alles)?')) return;
+  state = { kids: [], current: null, history: [] };
+  speichern();
+  render();
+}
+
+function render() {
+  const liste = document.getElementById('name-list');
+  liste.innerHTML = '';
+  for (const kid of state.kids) {
+    const li = document.createElement('li');
+    const amtStats = AEMTER.map(a => a.emoji + ' ' + anzahlAmt(kid, a.id) + '×').join(' · ');
+    li.innerHTML =
+      '<span class="kind-name">' + escapeHtml(kid.name) + '</span>' +
+      '<span class="statistik">insgesamt ' + anzahlGesamt(kid) + '× · ' + amtStats + '</span>' +
+      '<span class="aktionen">' +
+      '<button class="klein" data-aktion="aendern" data-id="' + kid.id + '">✎</button>' +
+      '<button class="klein gefahr" data-aktion="loeschen" data-id="' + kid.id + '">✕</button></span>' +
+      '<span class="niemals"><span>Möchte dauerhaft nie:</span>' +
+      AEMTER.map(a =>
+        '<label><input type="checkbox" data-never="' + a.id + '" data-id="' + kid.id + '"' +
+        (kid.never && kid.never[a.id] ? ' checked' : '') + '> ' + a.emoji + ' ' + a.label + '</label>').join('') +
+      '</span>';
+    liste.appendChild(li);
+  }
+
+  const bereich = document.getElementById('current-round');
+  bereich.innerHTML = '';
+  if (!state.current) {
+    bereich.innerHTML = '<p class="leer">Noch keine Runde ausgelost.</p>';
+  } else {
+    for (const a of state.current.assignments) {
+      const karte = document.createElement('div');
+      karte.className = 'amt-karte';
+      const amt = AEMTER.find(x => x.id === a.amt);
+      const kind = a.kidId === null
+        ? '<span class="leer">Kein Kind verfügbar</span>'
+        : '<span class="kind">' + escapeHtml(kindName(a.kidId)) + '</span>';
+      karte.innerHTML =
+        '<span><span class="amt-titel">' + amt.emoji + ' ' + amt.label + ':</span> ' + kind + '</span>' +
+        (a.kidId === null ? '' :
+          '<span class="aktionen"><button class="klein" data-nicht="' + a.amt + '">Möchte nicht – jemand anders</button></span>');
+      bereich.appendChild(karte);
+    }
+    const aktionen = document.createElement('div');
+    aktionen.className = 'runde-aktion';
+    aktionen.innerHTML =
+      '<span class="statistik">Ausgelost: ' + state.current.datum + '</span>' +
+      '<button class="primaer" id="speichern-runde">✅ Runde speichern</button>' +
+      '<button id="drucken">🖨️ Drucken</button>' +
+      '<button class="gefahr" id="verwerfen-runde">Verwerfen</button>';
+    bereich.appendChild(aktionen);
+    if (hinweisText) {
+      const h = document.createElement('p');
+      h.className = 'hinweis';
+      h.textContent = hinweisText;
+      bereich.appendChild(h);
+    }
+  }
+
+  const hist = document.getElementById('history');
+  hist.innerHTML = '';
+  if (!state.history.length) {
+    hist.innerHTML = '<p class="leer">Noch keine abgeschlossenen Runden.</p>';
+  } else {
+    for (const h of state.history.slice().reverse()) {
+      const eintrag = document.createElement('div');
+      eintrag.className = 'historie-eintrag';
+      eintrag.innerHTML = '<div class="historie-datum">' + escapeHtml(h.datum) + '</div><ul class="historie-aemter">' +
+        h.assignments.map(a => {
+          const amt = AEMTER.find(x => x.id === a.amt);
+          return '<li>' + amt.emoji + ' ' + amt.label + ': <strong>' +
+            (a.kidId === null ? '–' : escapeHtml(kindName(a.kidId))) + '</strong></li>';
+        }).join('') + '</ul>';
+      hist.appendChild(eintrag);
+    }
+  }
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+document.getElementById('add-name').addEventListener('click', nameHinzufuegen);
+document.getElementById('name-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') nameHinzufuegen();
+});
+document.getElementById('draw').addEventListener('click', neueRunde);
+document.getElementById('reset').addEventListener('click', datenLoeschen);
+
+document.getElementById('name-list').addEventListener('click', e => {
+  const btn = e.target.closest('button[data-aktion]');
+  if (!btn) return;
+  if (btn.dataset.aktion === 'aendern') nameAendern(btn.dataset.id);
+  if (btn.dataset.aktion === 'loeschen') nameLoeschen(btn.dataset.id);
+});
+document.getElementById('name-list').addEventListener('change', e => {
+  const box = e.target.closest('input[data-never]');
+  if (box) neverUmschalten(box.dataset.id, box.dataset.never, box.checked);
+});
+
+document.getElementById('current-round').addEventListener('click', e => {
+  const nicht = e.target.closest('button[data-nicht]');
+  if (nicht) { moechteNicht(nicht.dataset.nicht); return; }
+  if (e.target.closest('#speichern-runde')) rundeSpeichern();
+  if (e.target.closest('#verwerfen-runde')) rundeVerwerfen();
+  if (e.target.closest('#drucken')) window.print();
+});
+
+render();
+</script>
+</body>
+</html>
